@@ -1,0 +1,11 @@
+[package]
+name = "xrandr-profile"
+version = "0.1.0"
+authors = ["Marvin Löbel <loebel.marvin@gmail.com>"]
+
+[dependencies]
+json = "*"
+
+# Unneeded as this should be small and fast
+#clap = "*"
+#edid = "*"
