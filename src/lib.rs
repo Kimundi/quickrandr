@@ -1,4 +1,8 @@
-extern crate json;
+extern crate serde;
+extern crate serde_json;
+
+#[macro_use]
+extern crate serde_derive;
 
 use std::io;
 use std::io::Read;
@@ -6,19 +10,20 @@ use std::process::Command;
 use std::process::Stdio;
 use std::path::Path;
 use std::fs;
+use std::collections::HashMap;
 
 #[derive(Debug)]
 pub enum Error {
     Io(io::Error),
-    Json(json::Error),
+    Json(serde_json::Error),
 }
 impl From<io::Error> for Error {
     fn from(x: io::Error) -> Self {
         Error::Io(x)
     }
 }
-impl From<json::Error> for Error {
-    fn from(x: json::Error) -> Self {
+impl From<serde_json::Error> for Error {
+    fn from(x: serde_json::Error) -> Self {
         Error::Json(x)
     }
 }
@@ -41,7 +46,7 @@ pub fn query_xrandr() -> io::Result<String> {
     return Ok(s);
 }
 
-#[derive(Hash, Ord, PartialOrd, Eq, PartialEq, Clone, Debug)]
+#[derive(Hash, Ord, PartialOrd, Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub enum Orientation {
     Normal,
     Left,
@@ -49,7 +54,7 @@ pub enum Orientation {
     Right,
 }
 
-#[derive(Hash, Ord, PartialOrd, Eq, PartialEq, Clone, Debug)]
+#[derive(Hash, Ord, PartialOrd, Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Geometry {
     pub width: usize,
     pub height: usize,
@@ -59,18 +64,20 @@ pub struct Geometry {
     pub is_primary: bool,
 }
 
-#[derive(Hash, Ord, PartialOrd, Eq, PartialEq, Clone, Debug)]
+#[derive(Hash, Ord, PartialOrd, Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub struct Output {
-    pub name: String,
-    pub edid_raw: String,
+    pub edid: String,
     pub geometry: Option<Geometry>
 }
+
+pub type Outputs = HashMap<String, Output>;
+pub type Database = Vec<Outputs>;
 
 impl Output {
     pub fn raw_edid_to_bytes(&self) -> Vec<u8> {
         let mut gather_bytes = Vec::new();
 
-        for hex_byte in self.edid_raw
+        for hex_byte in self.edid
             .as_bytes()
             .chunks(2)
             .map(|b| std::str::from_utf8(b).unwrap())
@@ -91,15 +98,9 @@ impl Output {
     */
 }
 
-#[derive(Hash, Ord, PartialOrd, Eq, PartialEq, Clone, Debug)]
-pub struct Parsed {
-    pub connected_outputs: Vec<Output>,
-}
 
-pub fn parse_xrandr(s: &str) -> Parsed {
-    let mut parsed = Parsed {
-        connected_outputs: vec![]
-    };
+pub fn parse_xrandr(s: &str) -> Outputs {
+    let mut parsed = HashMap::new();
 
     let mut lines = s.lines();
     let mut line;
@@ -202,15 +203,14 @@ pub fn parse_xrandr(s: &str) -> Parsed {
                 }
 
                 let out = Output {
-                    name: output_name.to_string(),
-                    edid_raw: gather,
+                    edid: gather,
                     geometry: geometry,
                 };
 
-                //println!("HEX: {}", out.edid_raw);
+                //println!("HEX: {}", out.edid);
                 //println!("PARSED: {:?}", out.parse_edid());
 
-                parsed.connected_outputs.push(out);
+                parsed.insert(output_name.to_string(), out);
 
                 break;
             }
@@ -221,22 +221,10 @@ pub fn parse_xrandr(s: &str) -> Parsed {
     parsed
 }
 
-pub fn read_json(p: &Path) -> DResult<json::JsonValue> {
-    let mut f = fs::File::open(p)?;
-    let mut contents = String::new();
-    f.read_to_string(&mut contents)?;
-
-    Ok(json::parse(&contents)?)
+pub fn parse_json(s: &str) -> DResult<Database> {
+    Ok(serde_json::from_str(s)?)
 }
 
-pub fn parse_json(contents: json::JsonValue) -> DResult<Parsed> {
-    println!("{:#}", contents);
-
-    let mut connected_outputs = Vec::new();
-
-    for item in contents.members() {
-
-    }
-
-    Ok(Parsed { connected_outputs })
+pub fn generate_json(p: &Database) -> DResult<String> {
+    Ok(serde_json::to_string(p)?)
 }
