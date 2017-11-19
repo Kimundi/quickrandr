@@ -10,7 +10,11 @@ use std::process::Command;
 use std::process::Stdio;
 use std::path::Path;
 use std::fs;
+use std::fs::File;
 use std::collections::HashMap;
+use std::io::BufReader;
+use std::io::BufWriter;
+use std::io::prelude::*;
 
 #[derive(Debug)]
 pub enum Error {
@@ -46,6 +50,17 @@ pub fn query_xrandr() -> io::Result<String> {
     return Ok(s);
 }
 
+pub fn invoke_xrandr(args: &[String]) -> io::Result<()> {
+    let mut child = Command::new("xrandr")
+                                .args(args)
+                                .spawn()?;
+
+    let ecode = child.wait()?;
+    assert!(ecode.success());
+
+    return Ok(());
+}
+
 #[derive(Hash, Ord, PartialOrd, Eq, PartialEq, Clone, Debug, Serialize, Deserialize)]
 pub enum Orientation {
     Normal,
@@ -70,14 +85,16 @@ pub struct Output {
     pub geometry: Option<Geometry>
 }
 
-pub type Outputs = HashMap<String, Output>;
+pub type ConnectedOutputs = HashMap<String, Output>;
 pub type OutputDefaults = HashMap<String, String>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Database {
-    pub configs: Vec<Outputs>,
+    pub configs: Vec<ConnectedOutputs>,
     pub default: OutputDefaults,
 }
+
+pub type OutputNames = Vec<String>;
 
 impl Output {
     pub fn raw_edid_to_bytes(&self) -> Vec<u8> {
@@ -105,8 +122,9 @@ impl Output {
 }
 
 
-pub fn parse_xrandr(s: &str) -> Outputs {
-    let mut parsed = HashMap::new();
+pub fn parse_xrandr(s: &str) -> (ConnectedOutputs, OutputNames) {
+    let mut connected_outputs = HashMap::new();
+    let mut output_names = Vec::new();
 
     let mut lines = s.lines();
     let mut line;
@@ -150,7 +168,11 @@ pub fn parse_xrandr(s: &str) -> Outputs {
         let output_name = unwrap_or_break!(splited.next());
         let state = unwrap_or_break!(splited.next());
 
-        if state != "connected" {
+        if state.ends_with("connected") && !output_name.starts_with("VIRTUAL") {
+            output_names.push(output_name.to_string());
+        }
+
+        if state != "connected" || output_name.starts_with("VIRTUAL") {
             next_line!(line, lines);
             continue;
         }
@@ -216,7 +238,7 @@ pub fn parse_xrandr(s: &str) -> Outputs {
                 //println!("HEX: {}", out.edid);
                 //println!("PARSED: {:?}", out.parse_edid());
 
-                parsed.insert(output_name.to_string(), out);
+                connected_outputs.insert(output_name.to_string(), out);
 
                 break;
             }
@@ -224,7 +246,8 @@ pub fn parse_xrandr(s: &str) -> Outputs {
 
     }
 
-    parsed
+    output_names.sort();
+    (connected_outputs, output_names)
 }
 
 pub fn parse_json(s: &str) -> DResult<Database> {
@@ -233,4 +256,174 @@ pub fn parse_json(s: &str) -> DResult<Database> {
 
 pub fn generate_json(p: &Database) -> DResult<String> {
     Ok(serde_json::to_string(p)?)
+}
+
+pub fn save_file(path: &Path, contents: &str) -> DResult<()> {
+    let file = File::create(path)?;
+    let mut buf_writer = BufWriter::new(file);
+    buf_writer.write(contents.as_bytes())?;
+    buf_writer.get_ref().sync_all()?;
+
+    Ok(())
+}
+
+pub fn load_file(path: &Path) -> DResult<String> {
+    let file = File::open(path)?;
+    let mut buf_reader = BufReader::new(file);
+    let mut ret = String::new();
+    buf_reader.read_to_string(&mut ret)?;
+    Ok(ret)
+}
+
+pub struct ConfigAndXrandr {
+    pub config_file: Database,
+    pub connected_outputs: ConnectedOutputs,
+    pub output_names: OutputNames,
+}
+
+pub fn load_config_and_query_xrandr(path: &Path) -> DResult<ConfigAndXrandr> {
+    let config_file = {
+        use std::thread;
+        let path = path.to_owned();
+        thread::spawn(move || parse_json(&load_file(&path)?))
+    };
+    let (connected_outputs, output_names) = parse_xrandr(&query_xrandr()?);
+    let config_file = config_file.join().unwrap()?;
+
+    Ok(ConfigAndXrandr {
+        config_file,
+        connected_outputs,
+        output_names,
+    })
+}
+
+pub fn cmd_create_empty(path: &Path, debug: bool) {
+    if fs::metadata(path).is_err() {
+        let empty_database = Database {
+            configs: Vec::new(),
+            default: HashMap::new(),
+        };
+
+        let contents = generate_json(&empty_database).unwrap();
+
+        if debug {
+            println!("DEBUG: Write to path {:?}:\n{}", path.display(), contents);
+        } else {
+            save_file(path, &contents).unwrap();
+        }
+    } else {
+        println!("File already exists, ignoring...");
+    }
+}
+
+pub fn fingerprint(connected_outputs: &ConnectedOutputs) -> Vec<(&str, &str)> {
+    let mut fingerprint = connected_outputs
+        .iter()
+        .map(|(name, &Output { ref edid, .. })| (name.as_ref(), edid.as_ref()))
+        .collect::<Vec<_>>();
+    fingerprint.sort_by_key(|x| x.0);
+    fingerprint
+}
+
+pub fn build_xrandr_args<F>(output_names: &[String], mut f: F) -> Vec<String>
+    where F: FnMut(&str) -> Option<Vec<String>>
+{
+        let mut xrandr_command_queue = Vec::<String>::new();
+
+        for output_name in output_names {
+            xrandr_command_queue.push("--output".into());
+            xrandr_command_queue.push(output_name.clone());
+
+            if let Some(output_commands) = f(&output_name) {
+                xrandr_command_queue.extend(output_commands);
+            } else {
+                xrandr_command_queue.push("--off".into());
+            }
+        }
+
+        xrandr_command_queue
+}
+
+pub fn cmd_auto(path: &Path, debug: bool) {
+    let ConfigAndXrandr {
+        config_file,
+        connected_outputs,
+        output_names,
+    } = load_config_and_query_xrandr(path).unwrap();
+
+    let current_hardware_fingerprint = fingerprint(&connected_outputs);
+
+    let xrandr_args;
+    if let Some(target_config) = config_file.configs
+        .iter().find(|x| fingerprint(x) == current_hardware_fingerprint)
+    {
+        // Found a fingerprint
+        if debug {
+            println!("FOUND target config: {:?}\n", target_config);
+        }
+
+        xrandr_args = build_xrandr_args(&output_names, |output_name| {
+            let mut xrandr_command_queue = Vec::<String>::new();
+
+            if let Some(geometry) = target_config
+                .get(output_name)
+                .and_then(|x| x.geometry.as_ref())
+            {
+                xrandr_command_queue.push("--mode".into());
+                match geometry.orientation {
+                    Orientation::Normal | Orientation::Inverted => {
+                        xrandr_command_queue.push(format!("{}x{}", geometry.width, geometry.height));
+                    }
+                    Orientation::Left | Orientation::Right => {
+                        xrandr_command_queue.push(format!("{}x{}", geometry.height, geometry.width));
+                    }
+                }
+
+                xrandr_command_queue.push("--rotate".into());
+                let orientation_str = match geometry.orientation {
+                    Orientation::Normal => "normal",
+                    Orientation::Inverted => "inverted",
+                    Orientation::Left => "left",
+                    Orientation::Right => "right",
+                };
+                xrandr_command_queue.push(orientation_str.into());
+
+                if geometry.is_primary {
+                    xrandr_command_queue.push("--primary".into());
+                }
+
+                Some(xrandr_command_queue)
+            } else {
+                None
+            }
+        });
+    } else {
+        // Start working with defaults
+        if debug {
+            println!("DEFAULTS {:?}\n", config_file.default);
+        }
+
+        xrandr_args = build_xrandr_args(&output_names, |output_name| {
+            if let Some(default) = config_file.default.get(output_name) {
+                Some(default.split_whitespace().map(|x| x.to_string()).collect())
+            } else {
+                None
+            }
+        });
+    }
+
+    if debug {
+        println!("xrandr args: {:?}", xrandr_args);
+    } else {
+        invoke_xrandr(&xrandr_args).unwrap();
+    }
+
+}
+
+pub fn cmd_save(path: &Path, debug: bool) {
+    let ConfigAndXrandr {
+        config_file,
+        connected_outputs,
+        output_names,
+    } = load_config_and_query_xrandr(path).unwrap();
 }
