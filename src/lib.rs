@@ -255,7 +255,7 @@ pub fn parse_json(s: &str) -> DResult<Database> {
 }
 
 pub fn generate_json(p: &Database) -> DResult<String> {
-    Ok(serde_json::to_string(p)?)
+    Ok(serde_json::to_string_pretty(p)?)
 }
 
 pub fn save_file(path: &Path, contents: &str) -> DResult<()> {
@@ -295,6 +295,12 @@ pub fn load_config_and_query_xrandr(path: &Path) -> DResult<ConfigAndXrandr> {
         connected_outputs,
         output_names,
     })
+}
+
+pub fn save_config(path: &Path, config_file: &Database) -> DResult<()> {
+    save_file(path, &generate_json(config_file)?)?;
+
+    Ok(())
 }
 
 pub fn cmd_create_empty(path: &Path, debug: bool) {
@@ -388,6 +394,9 @@ pub fn cmd_auto(path: &Path, debug: bool) {
                 };
                 xrandr_command_queue.push(orientation_str.into());
 
+                xrandr_command_queue.push("--pos".into());
+                xrandr_command_queue.push(format!("{}x{}", geometry.x_offset, geometry.y_offset));
+
                 if geometry.is_primary {
                     xrandr_command_queue.push("--primary".into());
                 }
@@ -422,8 +431,35 @@ pub fn cmd_auto(path: &Path, debug: bool) {
 
 pub fn cmd_save(path: &Path, debug: bool) {
     let ConfigAndXrandr {
-        config_file,
+        mut config_file,
         connected_outputs,
-        output_names,
+        ..
     } = load_config_and_query_xrandr(path).unwrap();
+
+    let mut found = false;
+    {
+        let current_hardware_fingerprint = fingerprint(&connected_outputs);
+        if let Some(target_config) = config_file.configs
+            .iter_mut().find(|x| fingerprint(x) == current_hardware_fingerprint)
+        {
+            *target_config = connected_outputs.clone();
+            found = true;
+        }
+    }
+
+    if !found {
+        config_file.configs.push(connected_outputs.clone());
+    }
+
+    if debug {
+        println!("Writing new config file:\n{}", generate_json(&config_file).unwrap());
+    } else {
+        save_config(path, &config_file).unwrap();
+    }
 }
+
+/*
+    TODO:
+    make cli default to ~/.config path
+    add some kind of override mechanism (force only notebook display)
+*/
