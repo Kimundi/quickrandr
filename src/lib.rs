@@ -71,7 +71,13 @@ pub struct Output {
 }
 
 pub type Outputs = HashMap<String, Output>;
-pub type Database = Vec<Outputs>;
+pub type OutputDefaults = HashMap<String, String>;
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct Database {
+    pub configs: Vec<Outputs>,
+    pub default: OutputDefaults,
+}
 
 impl Output {
     pub fn raw_edid_to_bytes(&self) -> Vec<u8> {
