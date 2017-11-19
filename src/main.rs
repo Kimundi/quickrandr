@@ -1,4 +1,4 @@
-extern crate xrandr_profile;
+extern crate quickrandr;
 extern crate clap;
 
 use std::path::Path;
@@ -37,12 +37,12 @@ fn main() {
     let debug = matches.is_present("debug");
 
     if matches.is_present("create-empty") {
-        xrandr_profile::cmd_create_empty(Path::new(&config_path), debug);
+        quickrandr::cmd_create_empty(Path::new(&config_path), debug);
     }
     if matches.is_present("auto") {
-        xrandr_profile::cmd_auto(Path::new(&config_path), debug);
+        quickrandr::cmd_auto(Path::new(&config_path), debug);
     }
     if matches.is_present("save") {
-        xrandr_profile::cmd_save(Path::new(&config_path), debug);
+        quickrandr::cmd_save(Path::new(&config_path), debug);
     }
 }

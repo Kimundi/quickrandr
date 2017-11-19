@@ -1,4 +1,4 @@
-extern crate xrandr_profile;
+extern crate quickrandr;
 
 const EXAMPLE1: &str = include_str!("xrandr_output_1.txt");
 const EXAMPLE2: &str = include_str!("xrandr_output_2.txt");
@@ -6,35 +6,17 @@ const EXAMPLE3: &str = include_str!("xrandr_output_3.txt");
 
 #[test]
 fn test() {
-    let x = xrandr_profile::parse_xrandr(EXAMPLE1);
-
-    println!("Example setup:");
-    for (name, o) in x {
-        println!("Display: {}, edid: {}", name, o.edid);
-        println!("    Geometry: {:?}", o.geometry);
-    }
+    let _ = quickrandr::parse_xrandr(EXAMPLE1);
 }
 
 #[test]
 fn test2() {
-    let x = xrandr_profile::parse_xrandr(EXAMPLE2);
-
-    println!("Example setup:");
-    for (name, o) in x {
-        println!("Display: {}, edid: {}", name, o.edid);
-        println!("    Geometry: {:?}", o.geometry);
-    }
+    let _ = quickrandr::parse_xrandr(EXAMPLE2);
 }
 
 #[test]
 fn test3() {
-    let x = xrandr_profile::parse_xrandr(EXAMPLE3);
-
-    println!("Example setup:");
-    for (name, o) in x {
-        println!("Display: {}, edid: {}", name, o.edid);
-        println!("    Geometry: {:?}", o.geometry);
-    }
+    let _ = quickrandr::parse_xrandr(EXAMPLE3);
 }
 
 #[test]
@@ -84,6 +66,6 @@ fn json() {
         }
     }"#;
 
-    xrandr_profile::parse_json(j).unwrap();
+    quickrandr::parse_json(j).unwrap();
 
 }

@@ -1,6 +1,6 @@
 [package]
-name = "xrandr-profile"
-version = "0.1.0"
+name = "quickrandr"
+version = "0.2.0"
 authors = ["Marvin Löbel <loebel.marvin@gmail.com>"]
 
 [dependencies]
