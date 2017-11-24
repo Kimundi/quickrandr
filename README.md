@@ -3,7 +3,7 @@ A command line tool for saving and restoring xrandr display configurations
 
 # Example config file:
 
-```{.json}
+~~~.json
 {
     "autoprofiles": [
         {
@@ -42,8 +42,7 @@ A command line tool for saving and restoring xrandr display configurations
                     "is_primary": false
                 }
             }
-        },
-        ...
+        }
     ],
     "profiles": {
         "default": {
@@ -60,4 +59,4 @@ A command line tool for saving and restoring xrandr display configurations
         }
     }
 }
-```
+~~~
