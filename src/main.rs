@@ -12,26 +12,45 @@ fn main() {
                         .short("c")
                         .long("config")
                         .value_name("FILE")
-                        .help("Sets a custom config file, or uses a default one in the according to the XDG convention")
+                        .help("Sets a custom config file. If not given, it stores it in the users config file directory.")
                         .takes_value(true)
-                        )
+                    )
                     .arg(Arg::with_name("auto")
                         .short("a")
                         .long("auto")
-                        .help("Automatically configures the displays according to the config file"))
+                        .help("Automatically configures the displays according to the config file.")
+                    )
+                    .arg(Arg::with_name("default-profile")
+                        .short("d")
+                        .long("default-profile")
+                        .value_name("PROFILE")
+                        .help("Selects a profile to apply in case --auto does not recognize the current system config.")
+                        .takes_value(true)
+                    )
+                    .arg(Arg::with_name("profile")
+                        .short("p")
+                        .long("profile")
+                        .value_name("PROFILE")
+                        .help("Applies the given profile.")
+                        .takes_value(true)
+                    )
                     .arg(Arg::with_name("save")
                         .short("s")
                         .long("save")
-                        .help("Stores the current display configuration to the config file for a later automatic display configuration."))
+                        .help("Stores the current display configuration to the config file for a later automatic display configuration.")
+                    )
                     .arg(Arg::with_name("create-empty")
                         .long("create-empty")
-                        .help("Creates a empty config file"))
+                        .help("Creates an empty config file.")
+                    )
                     .arg(Arg::with_name("debug")
                         .long("debug")
-                        .help("Does verbose printing, and only simulates calls to xrandr"))
-                    .arg(Arg::with_name("list")
-                        .long("list")
-                        .help("List the contents of the config file an the current connected hardware in an abbreviated form"))
+                        .help("Does verbose printing, and only simulates calls to xrandr.")
+                    )
+                    .arg(Arg::with_name("info")
+                        .long("info")
+                        .help("Prints the contents of the config file and the current connected hardware in an abbreviated form.")
+                    )
                     .get_matches();
 
     let debug = matches.is_present("debug");
@@ -42,16 +61,26 @@ fn main() {
         quickrandr::xdg_config_file().unwrap()
     };
 
+    if matches.is_present("info") {
+        quickrandr::cmd_info(&config_path, debug);
+        return;
+    }
     if matches.is_present("create-empty") {
         quickrandr::cmd_create_empty(&config_path, debug);
+        return;
+    }
+    if let Some(profile) = matches.value_of("profile") {
+        quickrandr::cmd_profile(&config_path, profile, debug);
+        return;
     }
     if matches.is_present("auto") {
-        quickrandr::cmd_auto(&config_path, debug);
+        let default_profile = matches.value_of("default-profile");
+
+        quickrandr::cmd_auto(&config_path, default_profile, debug);
+        return;
     }
     if matches.is_present("save") {
         quickrandr::cmd_save(&config_path, debug);
-    }
-    if matches.is_present("list") {
-        quickrandr::cmd_list(&config_path, debug);
+        return;
     }
 }

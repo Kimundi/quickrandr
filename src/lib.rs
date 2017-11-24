@@ -92,17 +92,21 @@ pub struct Output {
     pub geometry: Option<Geometry>
 }
 
+pub type RawXrandr = String;
+pub type Profiles = HashMap<String, Profile>;
 pub type ConnectedOutputs = HashMap<String, Output>;
-pub type OutputsRawXrandr = HashMap<String, String>;
-pub type OutputOverrides = HashMap<String, OutputsRawXrandr>;
+pub type OutputsRawXrandr = HashMap<String, RawXrandr>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct ConfigFile {
-    pub configs: Vec<ConnectedOutputs>,
-    pub default: OutputsRawXrandr,
+pub struct Profile {
+    pub outputs: OutputsRawXrandr,
+    pub other_outputs: RawXrandr,
+}
 
-    #[serde(default)]
-    pub overrides: OutputOverrides,
+#[derive(Clone, Debug, Serialize, Deserialize, Default)]
+pub struct ConfigFile {
+    pub autoprofiles: Vec<ConnectedOutputs>,
+    pub profiles: Profiles,
 }
 
 pub type OutputNames = Vec<String>;
@@ -321,11 +325,7 @@ pub fn save_config(path: &Path, config_file: &ConfigFile) -> DResult<()> {
 
 pub fn cmd_create_empty(path: &Path, debug: bool) {
     if fs::metadata(path).is_err() {
-        let empty_database = ConfigFile {
-            configs: Vec::new(),
-            default: HashMap::new(),
-            overrides: HashMap::new(),
-        };
+        let empty_database = ConfigFile::default();
 
         let contents = generate_json(&empty_database).unwrap();
 
@@ -347,25 +347,20 @@ pub fn fingerprint(connected_outputs: &ConnectedOutputs) -> Vec<(&str, &str)> {
 }
 
 pub fn build_xrandr_args<F>(output_names: &[String], mut f: F) -> Vec<String>
-    where F: FnMut(&str) -> Option<Vec<String>>
+    where F: FnMut(&str) -> Vec<String>
 {
         let mut xrandr_command_queue = Vec::<String>::new();
 
         for output_name in output_names {
             xrandr_command_queue.push("--output".into());
             xrandr_command_queue.push(output_name.clone());
-
-            if let Some(output_commands) = f(&output_name) {
-                xrandr_command_queue.extend(output_commands);
-            } else {
-                xrandr_command_queue.push("--off".into());
-            }
+            xrandr_command_queue.extend(f(&output_name));
         }
 
         xrandr_command_queue
 }
 
-pub fn cmd_auto(path: &Path, debug: bool) {
+pub fn cmd_auto(path: &Path, default_profile: Option<&str>, debug: bool) {
     cmd_create_empty(path, debug);
 
     let ConfigAndXrandr {
@@ -376,8 +371,7 @@ pub fn cmd_auto(path: &Path, debug: bool) {
 
     let current_hardware_fingerprint = fingerprint(&connected_outputs);
 
-    let xrandr_args;
-    if let Some(target_config) = config_file.configs
+    if let Some(target_config) = config_file.autoprofiles
         .iter().find(|x| fingerprint(x) == current_hardware_fingerprint)
     {
         // Found a fingerprint
@@ -385,7 +379,7 @@ pub fn cmd_auto(path: &Path, debug: bool) {
             println!("FOUND target config: {:?}\n", target_config);
         }
 
-        xrandr_args = build_xrandr_args(&output_names, |output_name| {
+        let xrandr_args = build_xrandr_args(&output_names, |output_name| {
             let mut xrandr_command_queue = Vec::<String>::new();
 
             if let Some(geometry) = target_config
@@ -417,33 +411,47 @@ pub fn cmd_auto(path: &Path, debug: bool) {
                 if geometry.is_primary {
                     xrandr_command_queue.push("--primary".into());
                 }
-
-                Some(xrandr_command_queue)
             } else {
-                None
+                xrandr_command_queue.push("--off".into());
             }
+
+            xrandr_command_queue
         });
-    } else {
+
+        if debug {
+            println!("xrandr args: {:?}", xrandr_args);
+        } else {
+            invoke_xrandr(&xrandr_args).unwrap();
+        }
+    } else if let Some(default_profile) = default_profile {
         // Start working with defaults
         if debug {
-            println!("DEFAULTS {:?}\n", config_file.default);
+            println!("DEFAULTS {} out of {:?}\n", default_profile, config_file.profiles);
         }
+        apply_profile(&output_names, &config_file.profiles, default_profile, debug);
+    } else {
+        eprintln!("Error: Unknown device config, and no default profile given!")
+    }
+}
 
-        xrandr_args = build_xrandr_args(&output_names, |output_name| {
-            if let Some(default) = config_file.default.get(output_name) {
-                Some(default.split_whitespace().map(|x| x.to_string()).collect())
+pub fn apply_profile(output_names: &[String], profiles: &Profiles, name: &str, debug: bool) {
+    if let Some(profile) = profiles.get(name) {
+        let xrandr_args = build_xrandr_args(&output_names, |output_name| {
+            if let Some(default) = profile.outputs.get(output_name) {
+                default.split_whitespace().map(|x| x.to_string()).collect()
             } else {
-                None
+                vec![profile.other_outputs.clone()]
             }
         });
-    }
 
-    if debug {
-        println!("xrandr args: {:?}", xrandr_args);
+        if debug {
+            println!("xrandr args: {:?}", xrandr_args);
+        } else {
+            invoke_xrandr(&xrandr_args).unwrap();
+        }
     } else {
-        invoke_xrandr(&xrandr_args).unwrap();
+        eprintln!("Error: Unknown profile {}!", name);
     }
-
 }
 
 pub fn cmd_save(path: &Path, debug: bool) {
@@ -458,7 +466,7 @@ pub fn cmd_save(path: &Path, debug: bool) {
     let mut found = false;
     {
         let current_hardware_fingerprint = fingerprint(&connected_outputs);
-        if let Some(target_config) = config_file.configs
+        if let Some(target_config) = config_file.autoprofiles
             .iter_mut().find(|x| fingerprint(x) == current_hardware_fingerprint)
         {
             *target_config = connected_outputs.clone();
@@ -467,7 +475,7 @@ pub fn cmd_save(path: &Path, debug: bool) {
     }
 
     if !found {
-        config_file.configs.push(connected_outputs.clone());
+        config_file.autoprofiles.push(connected_outputs.clone());
     }
 
     if debug {
@@ -477,7 +485,7 @@ pub fn cmd_save(path: &Path, debug: bool) {
     }
 }
 
-pub fn cmd_list(path: &Path, debug: bool) {
+pub fn cmd_info(path: &Path, debug: bool) {
     cmd_create_empty(path, debug);
 
     let ConfigAndXrandr {
@@ -509,16 +517,33 @@ pub fn cmd_list(path: &Path, debug: bool) {
         }
     };
 
-    println!("Config file:");
-    for x in &config_file.configs {
+    println!("Auto Profiles:");
+    for x in &config_file.autoprofiles {
         print_entry(x);
         println!();
     }
     println!("Current:");
     print_entry(&connected_outputs);
+    println!("Profiles:");
+    for x in &config_file.profiles {
+        println!("    {}: ", x.0);
+        let mut v: Vec<_> = x.1.outputs.iter().collect();
+        v.sort_by_key(|x| x.0);
+        for x in v {
+            println!("       {}: {}", x.0, x.1);
+        }
+        println!("       <other>: {}", x.1.other_outputs);
+    }
 }
 
-/*
-    TODO:
-    add some kind of override mechanism (force only notebook display)
-*/
+pub fn cmd_profile(path: &Path, profile: &str, debug: bool) {
+    cmd_create_empty(path, debug);
+
+    let ConfigAndXrandr {
+        config_file,
+        output_names,
+        ..
+    } = load_config_and_query_xrandr(path).unwrap();
+
+    apply_profile(&output_names, &config_file.profiles, profile, debug);
+}
