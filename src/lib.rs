@@ -329,8 +329,6 @@ pub fn cmd_create_empty(path: &Path, debug: bool) {
         } else {
             save_file(path, &contents).unwrap();
         }
-    } else {
-        println!("File already exists, ignoring...");
     }
 }
 
@@ -363,6 +361,8 @@ pub fn build_xrandr_args<F>(output_names: &[String], mut f: F) -> Vec<String>
 }
 
 pub fn cmd_auto(path: &Path, debug: bool) {
+    cmd_create_empty(path, debug);
+
     let ConfigAndXrandr {
         config_file,
         connected_outputs,
@@ -442,6 +442,8 @@ pub fn cmd_auto(path: &Path, debug: bool) {
 }
 
 pub fn cmd_save(path: &Path, debug: bool) {
+    cmd_create_empty(path, debug);
+
     let ConfigAndXrandr {
         mut config_file,
         connected_outputs,
@@ -470,7 +472,9 @@ pub fn cmd_save(path: &Path, debug: bool) {
     }
 }
 
-pub fn cmd_list(path: &Path, _debug: bool) {
+pub fn cmd_list(path: &Path, debug: bool) {
+    cmd_create_empty(path, debug);
+
     let ConfigAndXrandr {
         config_file,
         connected_outputs,
