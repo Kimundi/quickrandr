@@ -1,14 +1,15 @@
-extern crate serde;
-extern crate serde_json;
-
 #[macro_use]
 extern crate serde_derive;
+
+extern crate serde;
+extern crate serde_json;
+extern crate xdg;
 
 use std::io;
 use std::io::Read;
 use std::process::Command;
 use std::process::Stdio;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::fs;
 use std::fs::File;
 use std::collections::HashMap;
@@ -20,6 +21,7 @@ use std::io::prelude::*;
 pub enum Error {
     Io(io::Error),
     Json(serde_json::Error),
+    Xdg(xdg::BaseDirectoriesError),
 }
 impl From<io::Error> for Error {
     fn from(x: io::Error) -> Self {
@@ -29,6 +31,11 @@ impl From<io::Error> for Error {
 impl From<serde_json::Error> for Error {
     fn from(x: serde_json::Error) -> Self {
         Error::Json(x)
+    }
+}
+impl From<xdg::BaseDirectoriesError> for Error {
+    fn from(x: xdg::BaseDirectoriesError) -> Self {
+        Error::Xdg(x)
     }
 }
 
@@ -273,6 +280,11 @@ pub fn load_file(path: &Path) -> DResult<String> {
     let mut ret = String::new();
     buf_reader.read_to_string(&mut ret)?;
     Ok(ret)
+}
+
+pub fn xdg_config_file() -> DResult<PathBuf> {
+    let xdg_dirs = xdg::BaseDirectories::with_prefix("quickrandr")?;
+    Ok(xdg_dirs.place_config_file("config.json")?)
 }
 
 pub struct ConfigAndXrandr {

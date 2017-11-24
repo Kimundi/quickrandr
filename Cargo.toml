@@ -4,11 +4,11 @@ version = "0.2.0"
 authors = ["Marvin Löbel <loebel.marvin@gmail.com>"]
 
 [dependencies]
-serde = "*"
-serde_derive = "*"
-serde_json = "*"
-clap = "*"
+serde = "1.0"
+serde_derive = "1.0"
+serde_json = "1.0"
+clap = "2.0"
+xdg = "2.0"
 
-# Unneeded as this should be small and fast
-#
+# Actually unneeded, as we don't need to parse the edid data
 #edid = "*"

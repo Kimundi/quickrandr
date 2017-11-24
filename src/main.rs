@@ -1,8 +1,6 @@
 extern crate quickrandr;
 extern crate clap;
 
-use std::path::Path;
-
 use clap::{Arg, App};
 
 fn main() {
@@ -14,9 +12,9 @@ fn main() {
                         .short("c")
                         .long("config")
                         .value_name("FILE")
-                        .help("Sets a custom config file")
-                        .required(true)
-                        .takes_value(true))
+                        .help("Sets a custom config file, or uses a default one in the according to the XDG convention")
+                        .takes_value(true)
+                        )
                     .arg(Arg::with_name("auto")
                         .short("a")
                         .long("auto")
@@ -33,16 +31,21 @@ fn main() {
                         .help("Does verbose printing, and only simulates calls to xrandr"))
                     .get_matches();
 
-    let config_path = matches.value_of_os("config").unwrap();
     let debug = matches.is_present("debug");
 
+    let config_path = if let Some(p) = matches.value_of_os("config") {
+        p.into()
+    } else {
+        quickrandr::xdg_config_file().unwrap()
+    };
+
     if matches.is_present("create-empty") {
-        quickrandr::cmd_create_empty(Path::new(&config_path), debug);
+        quickrandr::cmd_create_empty(&config_path, debug);
     }
     if matches.is_present("auto") {
-        quickrandr::cmd_auto(Path::new(&config_path), debug);
+        quickrandr::cmd_auto(&config_path, debug);
     }
     if matches.is_present("save") {
-        quickrandr::cmd_save(Path::new(&config_path), debug);
+        quickrandr::cmd_save(&config_path, debug);
     }
 }
