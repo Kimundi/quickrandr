@@ -30,6 +30,7 @@ fn main() {
                         .value_name("PROFILE")
                         .help("Selects a profile to apply in case --auto does not recognize the current system config.")
                         .takes_value(true)
+                        .requires("auto")
                     )
                     .arg(Arg::with_name("profile")
                         .short("p")
