@@ -1,13 +1,17 @@
 extern crate quickrandr;
 extern crate clap;
 
-use clap::{Arg, App};
+use clap::{Arg, App, ArgGroup};
 
 fn main() {
     let matches = App::new(env!("CARGO_PKG_NAME"))
                     .version(env!("CARGO_PKG_VERSION"))
                     .author(env!("CARGO_PKG_AUTHORS"))
                     .about(env!("CARGO_PKG_DESCRIPTION"))
+                   .group(ArgGroup::with_name("main-options")
+                        .args(&["auto", "profile", "save", "create-empty", "info"])
+                        .required(true)
+                    )
                     .arg(Arg::with_name("config")
                         .short("c")
                         .long("config")
@@ -53,36 +57,35 @@ fn main() {
                         .long("info")
                         .help("Prints the contents of the config file and the current connected hardware in an abbreviated form.")
                     )
-                    .get_matches();
+                     .get_matches();
 
     let debug = matches.is_present("debug");
-
     let config_path = if let Some(p) = matches.value_of_os("config") {
         p.into()
     } else {
         quickrandr::xdg_config_file().unwrap()
     };
 
-    if matches.is_present("info") {
-        quickrandr::cmd_info(&config_path, debug);
-        return;
-    }
-    if matches.is_present("create-empty") {
-        quickrandr::cmd_create_empty(&config_path, debug);
-        return;
-    }
-    if let Some(profile) = matches.value_of("profile") {
-        quickrandr::cmd_profile(&config_path, profile, debug);
-        return;
-    }
     if matches.is_present("auto") {
         let default_profile = matches.value_of("default-profile");
 
         quickrandr::cmd_auto(&config_path, default_profile, debug);
         return;
     }
+    if matches.is_present("create-empty") {
+        quickrandr::cmd_create_empty(&config_path, debug);
+        return;
+    }
+    if matches.is_present("info") {
+        quickrandr::cmd_info(&config_path, debug);
+        return;
+    }
     if matches.is_present("save") {
         quickrandr::cmd_save(&config_path, debug);
+        return;
+    }
+    if let Some(profile) = matches.value_of("profile") {
+        quickrandr::cmd_profile(&config_path, profile, debug);
         return;
     }
 }
