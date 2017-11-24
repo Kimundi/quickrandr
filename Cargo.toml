@@ -2,6 +2,12 @@
 name = "quickrandr"
 version = "0.3.0"
 authors = ["Marvin Löbel <loebel.marvin@gmail.com>"]
+license = "MIT"
+
+description = "A command line tool for saving and restoring xrandr display configurations"
+repository = "https://github.com/Kimundi/quickrandr"
+keywords = ["xrandr", "display", "automatic", "configuration", "cli"]
+categories = [ "command-line-utilities" ]
 
 [dependencies]
 serde = "1.0"
