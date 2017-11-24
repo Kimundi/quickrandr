@@ -96,7 +96,7 @@ pub type ConnectedOutputs = HashMap<String, Output>;
 pub type OutputDefaults = HashMap<String, String>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Database {
+pub struct ConfigFile {
     pub configs: Vec<ConnectedOutputs>,
     pub default: OutputDefaults,
 }
@@ -257,11 +257,11 @@ pub fn parse_xrandr(s: &str) -> (ConnectedOutputs, OutputNames) {
     (connected_outputs, output_names)
 }
 
-pub fn parse_json(s: &str) -> DResult<Database> {
+pub fn parse_json(s: &str) -> DResult<ConfigFile> {
     Ok(serde_json::from_str(s)?)
 }
 
-pub fn generate_json(p: &Database) -> DResult<String> {
+pub fn generate_json(p: &ConfigFile) -> DResult<String> {
     Ok(serde_json::to_string_pretty(p)?)
 }
 
@@ -288,7 +288,7 @@ pub fn xdg_config_file() -> DResult<PathBuf> {
 }
 
 pub struct ConfigAndXrandr {
-    pub config_file: Database,
+    pub config_file: ConfigFile,
     pub connected_outputs: ConnectedOutputs,
     pub output_names: OutputNames,
 }
@@ -309,7 +309,7 @@ pub fn load_config_and_query_xrandr(path: &Path) -> DResult<ConfigAndXrandr> {
     })
 }
 
-pub fn save_config(path: &Path, config_file: &Database) -> DResult<()> {
+pub fn save_config(path: &Path, config_file: &ConfigFile) -> DResult<()> {
     save_file(path, &generate_json(config_file)?)?;
 
     Ok(())
@@ -317,7 +317,7 @@ pub fn save_config(path: &Path, config_file: &Database) -> DResult<()> {
 
 pub fn cmd_create_empty(path: &Path, debug: bool) {
     if fs::metadata(path).is_err() {
-        let empty_database = Database {
+        let empty_database = ConfigFile {
             configs: Vec::new(),
             default: HashMap::new(),
         };
@@ -470,8 +470,46 @@ pub fn cmd_save(path: &Path, debug: bool) {
     }
 }
 
+pub fn cmd_list(path: &Path, _debug: bool) {
+    let ConfigAndXrandr {
+        config_file,
+        connected_outputs,
+        ..
+    } = load_config_and_query_xrandr(path).unwrap();
+
+    let print_entry = |x: &ConnectedOutputs| {
+        let mut v: Vec<_> = x.iter().collect();
+        v.sort_by_key(|x| x.0);
+
+        for x in v {
+            print!("   {}:", x.0);
+            if let Some(ref x) =  x.1.geometry {
+
+                print!(" {:?}", x.orientation);
+
+                print!(" {}x{}+{}+{}", x.width, x.height, x.x_offset, x.y_offset);
+
+                if x.is_primary {
+                    print!(" primary");
+                }
+
+            } else {
+                print!(" disabled");
+            }
+            println!();
+        }
+    };
+
+    println!("Config file:");
+    for x in &config_file.configs {
+        print_entry(x);
+        println!();
+    }
+    println!("Current:");
+    print_entry(&connected_outputs);
+}
+
 /*
     TODO:
-    make cli default to ~/.config path
     add some kind of override mechanism (force only notebook display)
 */

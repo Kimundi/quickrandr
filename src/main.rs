@@ -29,6 +29,9 @@ fn main() {
                     .arg(Arg::with_name("debug")
                         .long("debug")
                         .help("Does verbose printing, and only simulates calls to xrandr"))
+                    .arg(Arg::with_name("list")
+                        .long("list")
+                        .help("List the contents of the config file an the current connected hardware in an abbreviated form"))
                     .get_matches();
 
     let debug = matches.is_present("debug");
@@ -47,5 +50,8 @@ fn main() {
     }
     if matches.is_present("save") {
         quickrandr::cmd_save(&config_path, debug);
+    }
+    if matches.is_present("list") {
+        quickrandr::cmd_list(&config_path, debug);
     }
 }
