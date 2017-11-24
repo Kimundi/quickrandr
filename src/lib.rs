@@ -93,12 +93,16 @@ pub struct Output {
 }
 
 pub type ConnectedOutputs = HashMap<String, Output>;
-pub type OutputDefaults = HashMap<String, String>;
+pub type OutputsRawXrandr = HashMap<String, String>;
+pub type OutputOverrides = HashMap<String, OutputsRawXrandr>;
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct ConfigFile {
     pub configs: Vec<ConnectedOutputs>,
-    pub default: OutputDefaults,
+    pub default: OutputsRawXrandr,
+
+    #[serde(default)]
+    pub overrides: OutputOverrides,
 }
 
 pub type OutputNames = Vec<String>;
@@ -320,6 +324,7 @@ pub fn cmd_create_empty(path: &Path, debug: bool) {
         let empty_database = ConfigFile {
             configs: Vec::new(),
             default: HashMap::new(),
+            overrides: HashMap::new(),
         };
 
         let contents = generate_json(&empty_database).unwrap();
