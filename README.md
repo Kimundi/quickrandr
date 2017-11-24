@@ -13,10 +13,10 @@ USAGE:
 
 FLAGS:
     -a, --auto            Automatically configures the displays according to the config file.
-        --create-empty    Creates an empty config file.
+    -n, --create-empty    Creates an empty config file.
         --debug           Does verbose printing, and only simulates calls to xrandr.
     -h, --help            Prints help information
-        --info            Prints the contents of the config file and the current connected hardware in an abbreviated
+    -i, --info            Prints the contents of the config file and the current connected hardware in an abbreviated
                           form.
     -s, --save            Stores the current display configuration to the config file for a later automatic display
                           configuration.
